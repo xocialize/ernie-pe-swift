@@ -137,8 +137,12 @@ public final class ErniePEPackage: ModelPackage {
             let width = llm.metaData["width"].flatMap(Self.intValue) ?? 1024
             let height = llm.metaData["height"].flatMap(Self.intValue) ?? 1024
             let system = llm.messages.first(where: { $0.role == .system })?.content
+            // A custom (e.g. Chinese) instruction disables the English-stabilizing prefix.
+            let prefix = llm.metaData["responsePrefix"].flatMap(Self.stringValue)
+                ?? (system == nil ? "A " : "")
             let text = pipeline.enhance(
                 prompt: prompt, width: width, height: height, systemPrompt: system,
+                responsePrefix: prefix,
                 maxNewTokens: maxTokens, temperature: temperature, topP: topP, seed: seed,
                 isCancelled: { Task.isCancelled })
             try Task.checkCancellation()
@@ -170,6 +174,11 @@ public final class ErniePEPackage: ModelPackage {
         return LLMResponse(text: text, finishReason: natural ? .stop : .length)
     }
 
+    nonisolated static func stringValue(_ value: MetaValue) -> String? {
+        if case .string(let s) = value { return s }
+        return nil
+    }
+
     nonisolated static func intValue(_ value: MetaValue) -> Int? {
         switch value {
         case .int(let i): return i
@@ -177,5 +186,12 @@ public final class ErniePEPackage: ModelPackage {
         case .string(let s): return Int(s)
         default: return nil
         }
+    }
+}
+
+extension ErniePEPackage {
+    /// The author one-liner the engine registers.
+    public nonisolated static var registration: PackageRegistration {
+        .of(ErniePEPackage.self)
     }
 }

@@ -144,9 +144,15 @@ public final class ErniePEPipeline {
     /// Prompt enhancement for ANY t2i model: brief prompt + target resolution -> rich
     /// description. `systemPrompt` overrides the default English instruction (e.g. the
     /// original Chinese one for Chinese-prompt models).
+    ///
+    /// `responsePrefix` seeds the assistant turn ("A " by default): the fine-tune's
+    /// output language is brittle under the English instruction alone (it intermittently
+    /// reverts to Chinese — observed 2026-06-12); forcing the first decoded token
+    /// stabilizes English reliably. Pass "" to disable (e.g. for the Chinese instruction).
     public func enhance(
         prompt: String, width: Int = 1024, height: Int = 1024,
-        systemPrompt: String? = nil, maxNewTokens: Int = 512,
+        systemPrompt: String? = nil, responsePrefix: String = "A ",
+        maxNewTokens: Int = 512,
         temperature: Float = 0.6, topP: Float = 0.95, seed: UInt64 = 0,
         isCancelled: () -> Bool = { false }
     ) -> String {
@@ -156,10 +162,11 @@ public final class ErniePEPipeline {
             encoding: .utf8)!
         let text = Self.render(
             system: systemPrompt ?? Self.enhanceSystemPrompt, turns: [(user: json, assistant: nil)])
+            + responsePrefix
         let (out, _) = generate(
             text: text, maxNewTokens: maxNewTokens, temperature: temperature, topP: topP,
             seed: seed, isCancelled: isCancelled)
-        return out
+        return responsePrefix + out
     }
 
     /// General chat over (system?, alternating user/assistant) turns.
