@@ -52,9 +52,9 @@ engine (separate capability slots).
 
 ## Status / consuming this package
 
-Weights are **not yet on the Hub** — load from a local `pe/` + `pe_tokenizer/` snapshot (or a
-converted 4-bit export). The package depends on **`mlx-engine-swift`** (the `MLXToolKit` contract)
-via a local sibling path (`.package(path: "../mlx-engine-swift")`); clone it as a sibling to build.
-No t2i dependency.
+The **MLX-converted** weights are not yet on the Hub — load from a local `pe/` + `pe_tokenizer/`
+snapshot (or a converted 4-bit export); this wrapper reads a local snapshot, it does not download. The package depends on **`mlx-engine-swift`** (the `MLXToolKit` contract)
+via a tagged-URL net dependency (`.package(url: "https://github.com/xocialize/mlx-engine-swift", from: "0.3.0")`),
+so it builds standalone. No t2i dependency.
 
 Apache-2.0 (weights) · MIT (port code).
