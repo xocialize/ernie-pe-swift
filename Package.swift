@@ -25,6 +25,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.30.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6"),
         .package(url: "https://github.com/xocialize/mlx-engine-swift", from: "0.3.0"),
+        .package(url: "https://github.com/xocialize/mlx-profiling.git", from: "0.1.0"),
     ],
     targets: [
         .target(
@@ -36,6 +37,7 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "MLXProfiling", package: "mlx-profiling"),
             ],
             path: "Sources/ErniePE"
         ),
@@ -44,6 +46,7 @@ let package = Package(
             dependencies: [
                 "ErniePE",
                 .product(name: "MLXToolKit", package: "mlx-engine-swift"),
+                .product(name: "MLXProfiling", package: "mlx-profiling"),
             ],
             path: "Sources/MLXErniePE"
         ),

@@ -14,6 +14,7 @@ import Foundation
 import MLX
 import MLXFast
 import MLXNN
+import MLXProfiling
 
 public enum ErniePEError: Error, CustomStringConvertible {
     case loading(String)
@@ -216,14 +217,31 @@ public final class ErniePEModel: Module {
         seed: UInt64 = 0,
         isCancelled: () -> Bool = { false }
     ) -> (tokens: [Int], finishedNaturally: Bool) {
+        let prof = MLXProfiler.shared
         let caches = (0..<layers.count).map { _ in PEKVCache() }
+        // MLX is lazy: step() only BUILDS the prefill graph — the first sample's `.item`
+        // realizes it, so manual spans bracket that eval boundary (no evals added).
+        var prefill: MLXProfiler.Span? = prof.begin(
+            "llm", "prefill", note: "promptTokens=\(promptIds.count)")
         var logits = step(
             MLXArray(promptIds.map { Int32($0) }).expandedDimensions(axis: 0), caches: caches)
         MLXRandom.seed(seed)
         var out: [Int] = []
+        var decode: MLXProfiler.Span?
+        defer {
+            if let decode { prof.end(decode) }
+            prof.mark("llm", "generated", index: out.count)  // exact ms/token denominator
+        }
         for _ in 0..<maxNewTokens {
             if isCancelled() { return (out, false) }
             let next = Self.sample(logits: logits, temperature: temperature, topP: topP)
+            if let started = prefill {
+                // That sample just realized prefill; the rest is decode. ONE span for the
+                // whole loop — per-token rows (up to maxNewTokens) would swamp the log.
+                prof.end(started)
+                prefill = nil
+                decode = prof.begin("llm", "decode", note: "maxNewTokens=\(maxNewTokens)")
+            }
             if next == Self.eosToken { return (out, true) }
             out.append(next)
             logits = step(MLXArray([Int32(next)]).expandedDimensions(axis: 0), caches: caches)

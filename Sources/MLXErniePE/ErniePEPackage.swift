@@ -9,6 +9,7 @@
 
 import Foundation
 import MLXToolKit
+import MLXProfiling
 import ErniePE
 import Tokenizers
 
@@ -130,6 +131,11 @@ public final class ErniePEPackage: ModelPackage {
         let maxTokens = llm.parameters.maxTokens ?? 512
         let seed: UInt64 = 0
 
+        // Shared env-gated instrument (MLX_PROFILE=1; zero overhead when unset). run()
+        // always follows load(), so weight I/O never lands inside the run window.
+        let prof = MLXProfiler.shared
+        let quant = configuration.quantizedPath != nil ? "int4" : "bf16"
+
         if llm.mode == .promptEnhance {
             guard let prompt = llm.messages.last(where: { $0.role == .user })?.content else {
                 throw PackageError.notLoaded  // no user prompt — nothing to enhance
@@ -140,11 +146,13 @@ public final class ErniePEPackage: ModelPackage {
             // A custom (e.g. Chinese) instruction disables the English-stabilizing prefix.
             let prefix = llm.metaData["responsePrefix"].flatMap(Self.stringValue)
                 ?? (system == nil ? "A " : "")
+            prof.beginRun("ernie-pe promptEnhance \(quant)")
             let text = pipeline.enhance(
                 prompt: prompt, width: width, height: height, systemPrompt: system,
                 responsePrefix: prefix,
                 maxNewTokens: maxTokens, temperature: temperature, topP: topP, seed: seed,
                 isCancelled: { Task.isCancelled })
+            prof.endRun(denominators: ["token": Self.generatedTokenCount(prof)])
             try Task.checkCancellation()
             return LLMResponse(text: text, finishReason: .stop)
         }
@@ -166,12 +174,21 @@ public final class ErniePEPackage: ModelPackage {
         }
         if let user = pendingUser { turns.append((user: user, assistant: nil)) }
 
+        prof.beginRun("ernie-pe chat \(quant)")
         let (text, natural) = pipeline.chat(
             system: system, turns: turns, maxNewTokens: maxTokens,
             temperature: temperature, topP: topP, seed: seed,
             isCancelled: { Task.isCancelled })
+        prof.endRun(denominators: ["token": Self.generatedTokenCount(prof)])
         try Task.checkCancellation()
         return LLMResponse(text: text, finishReason: natural ? .stop : .length)
+    }
+
+    /// Exact decode-token count the core marked as `llm/generated` — the pipeline returns
+    /// text (not token ids), so the ms/token denominator rides the profiler's own rows.
+    nonisolated static func generatedTokenCount(_ prof: MLXProfiler) -> Double {
+        Double(prof.recorded.last(where: { $0.group == "llm" && $0.label == "generated" })?
+            .index ?? 0)
     }
 
     nonisolated static func stringValue(_ value: MetaValue) -> String? {
