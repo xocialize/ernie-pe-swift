@@ -120,11 +120,16 @@ public final class ErniePEPackage: ModelPackage {
     }
 
     public func run(_ request: any CapabilityRequest) async throws -> any CapabilityResponse {
+        // CAN-1: the entry checkpoint is the FIRST act of run() — before notLoaded validation
+        // (engine ≥ 0.27.0). Mid-run cadence: the core's autoregressive loop checks the
+        // `isCancelled` closure once per generated token (ErniePE Model.generate) and bails
+        // with partial output; the post-generation checkpoints below rethrow the
+        // CancellationError unchanged. See CancellationTests for the cadence of record.
+        try Task.checkCancellation()
         guard let pipeline else { throw PackageError.notLoaded }
         guard request.capability == .llm, let llm = request as? LLMRequest else {
             throw PackageError.unsupportedCapability(request.capability)
         }
-        try Task.checkCancellation()
 
         let temperature = Float(llm.parameters.temperature ?? 0.6)
         let topP = Float(llm.parameters.topP ?? 0.95)
